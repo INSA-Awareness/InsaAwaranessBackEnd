@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Awareness LMS API</title>
+    <style>
+      :root {
+        --bg: #0d1117;
+        --panel: #161b22;
+        --text: #e6edf3;
+        --muted: #9da5b4;
+        --accent: #3fb950;
+        --border: #30363d;
+        --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+        --sans:
+          "Segoe UI", "Inter", -apple-system, BlinkMacSystemFont,
+          "Helvetica Neue", Arial, sans-serif;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(
+            circle at 20% 20%,
+            rgba(63, 185, 80, 0.12),
+            transparent 40%
+          ),
+          radial-gradient(
+            circle at 80% 10%,
+            rgba(56, 139, 253, 0.12),
+            transparent 32%
+          ),
+          radial-gradient(
+            circle at 50% 80%,
+            rgba(255, 215, 0, 0.08),
+            transparent 35%
+          ),
+          var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+      .card {
+        width: min(900px, 100%);
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+        padding: 28px 30px;
+      }
+      h1 {
+        margin: 0 0 8px 0;
+        font-size: 26px;
+        letter-spacing: 0.2px;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        background: rgba(63, 185, 80, 0.12);
+        border: 1px solid rgba(63, 185, 80, 0.35);
+        border-radius: 10px;
+        font-weight: 600;
+        color: var(--accent);
+        margin: 10px 0 18px;
+      }
+      .status-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 0 6px rgba(63, 185, 80, 0.15);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+        margin: 0 0 12px;
+      }
+      .tile {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px 16px;
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .tile strong {
+        display: block;
+        margin-bottom: 6px;
+      }
+      a {
+        color: #58a6ff;
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      .mono {
+        font-family: var(--mono);
+        font-size: 13px;
+      }
+      .footer {
+        margin-top: 16px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Awareness LMS API</h1>
+      <div class="muted">Multi-tenant LMS backend · Django + DRF</div>
+      <div class="status"><span class="status-dot"></span>Healthy</div>
+
+      <div class="grid">
+        <div class="tile">
+          <strong>Swagger UI</strong>
+          <a href="/api/swagger/">/api/swagger/</a>
+        </div>
+        <div class="tile">
+          <strong>Redoc</strong>
+          <a href="/api/redoc/">/api/redoc/</a>
+        </div>
+        <div class="tile">
+          <strong>OpenAPI Schema</strong>
+          <a href="/api/schema/">/api/schema/</a>
+        </div>
+        <div class="tile">
+          <strong>Django Admin</strong>
+          <a href="/admin/">/admin/</a>
+        </div>
+      </div>
+
+      <div class="tile" style="margin-top: 12px">
+        <strong>Health</strong>
+        <div class="mono">status: ok</div>
+        <div class="mono">timestamp: {{ now }}</div>
+        <div class="mono">debug: {{ debug }}</div>
+      </div>
+
+      <div class="footer">
+        If you reached this page by mistake, navigate using the links above.
+      </div>
+    </div>
+  </body>
+</html>
