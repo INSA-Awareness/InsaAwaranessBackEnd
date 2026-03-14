@@ -9,9 +9,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 env = environ.Env(
     DEBUG=(bool, False),
     SECRET_KEY=(str, "changeme"),
-    ALLOWED_HOSTS=(list, ["*"]),
+    ALLOWED_HOSTS=(list, [".onrender.com", "insaawaranessbackend.onrender.com"]),
     CORS_ALLOWED_ORIGINS=(list, []),
-    CSRF_TRUSTED_ORIGINS=(list, []),
+    CSRF_TRUSTED_ORIGINS=(list, ["https://*.onrender.com", "https://insaawaranessbackend.onrender.com"]),
     CONN_MAX_AGE=(int, 60),
 )
 
@@ -20,7 +20,7 @@ environ.Env.read_env(BASE_DIR / ".env")
 SECRET_KEY = env("SECRET_KEY")
 DEBUG = env("DEBUG")
 
-ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["*"])
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[".onrender.com", "insaawaranessbackend.onrender.com"])
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -170,7 +170,10 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="no-reply@awareness.local
 
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
-CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+CSRF_TRUSTED_ORIGINS = env.list(
+    "CSRF_TRUSTED_ORIGINS",
+    default=["https://*.onrender.com", "https://insaawaranessbackend.onrender.com"],
+)
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = not DEBUG
