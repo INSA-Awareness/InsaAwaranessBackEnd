@@ -2,6 +2,8 @@ services:
   - type: web
     name: awareness-backend
     env: python
+    repo: https://github.com/INSA-Awareness/InsaAwaranessBackEnd
+    branch: main
     plan: free
     region: oregon
     autoDeploy: true
@@ -15,11 +17,11 @@ services:
       - key: DEBUG
         value: "false"
       - key: ALLOWED_HOSTS
-        value: ".onrender.com,yourdomain.com"
+        value: ".onrender.com"
       - key: CSRF_TRUSTED_ORIGINS
-        value: "https://*.onrender.com,https://yourdomain.com"
+        value: "https://*.onrender.com"
       - key: CORS_ALLOWED_ORIGINS
-        value: "https://your-frontend.com"
+        value: ""
       - key: PYTHON_VERSION
         value: "3.12"
       - key: CONN_MAX_AGE
