@@ -37,6 +37,10 @@ class IsOrgAdmin(RolePermission):
     allowed_roles = ["org_admin"]
 
 
+class IsSuperAdminOrOrgAdmin(RolePermission):
+    allowed_roles = ["super_admin", "org_admin"]
+
+
 class IsCourseProvider(RolePermission):
     allowed_roles = ["course_provider", "super_admin"]
 

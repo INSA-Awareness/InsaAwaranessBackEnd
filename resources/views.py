@@ -13,7 +13,8 @@ class ResourceViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action in ["create", "update", "partial_update", "destroy", "publish"]:
-            return [IsCourseProvider() | IsSuperAdmin()]
+            # Course providers already include super_admin in allowed roles
+            return [IsCourseProvider()]
         if self.action in ["list", "retrieve"]:
             return [permissions.AllowAny()]
         return super().get_permissions()
