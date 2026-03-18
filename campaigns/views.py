@@ -1,6 +1,6 @@
 from rest_framework import viewsets, permissions
 
-from core.permissions import IsSuperAdmin
+from core.permissions import IsSuperAdmin, IsOrgAdmin
 from core.mixins import OrgScopedViewSetMixin
 from .models import Campaign
 from .serializers import CampaignSerializer
@@ -14,5 +14,14 @@ class CampaignViewSet(OrgScopedViewSetMixin, viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action in ["create", "update", "partial_update", "destroy"]:
-            return [IsSuperAdmin()]
+            return [IsSuperAdmin() | IsOrgAdmin()]
         return super().get_permissions()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        organization = None
+        if getattr(user, "role", None) == "super_admin":
+            organization = serializer.validated_data.get("organization")
+        else:
+            organization = getattr(user, "primary_organization", None)
+        serializer.save(created_by=user, organization=organization)

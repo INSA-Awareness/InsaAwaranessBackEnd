@@ -19,6 +19,8 @@ from compliance.views import ComplianceReportViewSet
 from training_requests.views import TrainingRequestViewSet
 from finance.views import PaymentApprovalViewSet
 from notifications.views import NotificationViewSet
+from alerts.views import AlertViewSet, AlertDeliveryViewSet, AlertViewLogViewSet
+from awareness_tools.views import AwarenessToolViewSet, AwarenessToolUsageViewSet
 
 router = DefaultRouter()
 router.register(r"organizations", OrganizationViewSet, basename="organization")
@@ -37,6 +39,11 @@ router.register(r"compliance-reports", ComplianceReportViewSet, basename="compli
 router.register(r"training-requests", TrainingRequestViewSet, basename="training-request")
 router.register(r"payment-approvals", PaymentApprovalViewSet, basename="payment-approval")
 router.register(r"notifications", NotificationViewSet, basename="notification")
+router.register(r"alerts", AlertViewSet, basename="alert")
+router.register(r"alert-deliveries", AlertDeliveryViewSet, basename="alert-delivery")
+router.register(r"alert-views", AlertViewLogViewSet, basename="alert-view")
+router.register(r"superadmin/awareness-tools", AwarenessToolViewSet, basename="awareness-tool")
+router.register(r"superadmin/awareness-tool-usages", AwarenessToolUsageViewSet, basename="awareness-tool-usage")
 
 urlpatterns = [
     path("auth/", include(accounts_urls)),

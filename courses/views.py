@@ -224,8 +224,21 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
             "profile_completion_endpoint": "/api/auth/user/background-profile/",
         }
 
-    def perform_create(self, serializer):
-        serializer.save()
+    def _validate_org_admin_enrollment(self, acting_user, data):
+        if getattr(acting_user, "role", None) != User.ROLE_ORG_ADMIN:
+            return
+        target_user = data.get("user")
+        course = data.get("course")
+        if not target_user or not course:
+            return
+        org_ids = set(acting_user.memberships.values_list("organization_id", flat=True))
+        if not org_ids:
+            raise PermissionDenied("You are not assigned to any organization")
+        user_org_ids = set(target_user.memberships.values_list("organization_id", flat=True))
+        if not (org_ids & user_org_ids):
+            raise PermissionDenied("User is not in your organization")
+        if course.organization_id and course.organization_id not in org_ids:
+            raise PermissionDenied("Course is not in your organization")
 
     def perform_update(self, serializer):
         enrollment: Enrollment = serializer.instance
@@ -239,13 +252,31 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         profile_block = self._ensure_public_profile(request.user)
         if profile_block:
             return response.Response(profile_block, status=status.HTTP_400_BAD_REQUEST)
-        return super().create(request, *args, **kwargs)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self._validate_org_admin_enrollment(request.user, serializer.validated_data)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return response.Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def update(self, request, *args, **kwargs):
         profile_block = self._ensure_public_profile(request.user)
         if profile_block:
             return response.Response(profile_block, status=status.HTTP_400_BAD_REQUEST)
-        return super().update(request, *args, **kwargs)
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+        self._validate_org_admin_enrollment(
+            request.user,
+            {
+                "user": validated.get("user", instance.user),
+                "course": validated.get("course", instance.course),
+            },
+        )
+        self.perform_update(serializer)
+        return response.Response(serializer.data)
 
     def _check_object_permission(self, request, enrollment: Enrollment):
         user = request.user
@@ -264,7 +295,8 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         profile_block = self._ensure_public_profile(request.user)
         if profile_block:
             return response.Response(profile_block, status=status.HTTP_400_BAD_REQUEST)
-        return super().partial_update(request, *args, **kwargs)
+        kwargs["partial"] = True
+        return self.update(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         enrollment = serializer.save()

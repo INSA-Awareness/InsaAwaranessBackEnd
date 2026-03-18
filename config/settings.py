@@ -47,6 +47,8 @@ INSTALLED_APPS = [
     "finance",
     "notifications",
     "audit",
+    "alerts",
+    "awareness_tools",
     "api",
 ]
 
