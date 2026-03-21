@@ -3,7 +3,12 @@ from rest_framework import viewsets, permissions, decorators, response, status, 
 
 from core.permissions import IsSuperAdmin
 from .models import AwarenessTool, AwarenessToolUsage
-from .serializers import AwarenessToolSerializer, AwarenessToolConfigSerializer, AwarenessToolUsageSerializer
+from .serializers import (
+    AwarenessToolSerializer,
+    AwarenessToolConfigSerializer,
+    AwarenessToolUsageSerializer,
+    PublicAwarenessToolSerializer,
+)
 
 
 class AwarenessToolViewSet(viewsets.ModelViewSet):
@@ -69,3 +74,13 @@ class AwarenessToolUsageViewSet(viewsets.ReadOnlyModelViewSet):
     search_fields = ["tool__name", "user__email", "action"]
     ordering_fields = ["created_at"]
     ordering = ["-created_at"]
+
+
+class PublicAwarenessToolViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = AwarenessTool.objects.filter(status=AwarenessTool.STATUS_ENABLED).order_by("name")
+    serializer_class = PublicAwarenessToolSerializer
+    permission_classes = [permissions.AllowAny]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ["name", "description"]
+    ordering_fields = ["name", "created_at", "updated_at"]
+    ordering = ["name"]

@@ -27,6 +27,13 @@ class AwarenessToolSerializer(serializers.ModelSerializer):
         return data
 
 
+class PublicAwarenessToolSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AwarenessTool
+        fields = ["id", "name", "description", "status", "created_at", "updated_at"]
+        read_only_fields = fields
+
+
 class AwarenessToolConfigSerializer(serializers.ModelSerializer):
     class Meta:
         model = AwarenessTool
