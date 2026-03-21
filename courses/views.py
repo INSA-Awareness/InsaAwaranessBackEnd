@@ -5,6 +5,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from core.permissions import IsSuperAdmin, IsCourseProvider
 from .models import Course, Module, Article, Video, Assessment, Enrollment, Certificate, Lesson, EnrollmentProfileSnapshot
+from .models import AssessmentAttempt
 from accounts.models import BackgroundProfile, User
 from .serializers import (
     CourseSerializer,
@@ -16,6 +17,7 @@ from .serializers import (
     EnrollmentSerializer,
     CertificateSerializer,
     LessonSerializer,
+    AssessmentAttemptSerializer,
     AssignProviderSerializer,
     AssignOrganizationSerializer,
 )
@@ -152,9 +154,12 @@ class ArticleViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if not user or not user.is_authenticated:
             return qs.none()
-        if user.role != User.ROLE_SUPER_ADMIN:
-            qs = qs.filter(module__course__course_provider=user)
         return qs
+
+    def get_permissions(self):
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            return [permissions.IsAuthenticated(), IsCourseProvider()]
+        return [permissions.IsAuthenticated()]
 
 
 class VideoViewSet(viewsets.ModelViewSet):
@@ -171,6 +176,75 @@ class VideoViewSet(viewsets.ModelViewSet):
         if user.role != User.ROLE_SUPER_ADMIN:
             qs = qs.filter(module__course__course_provider=user)
         return qs
+
+    @decorators.action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated], url_path="submit")
+    def submit(self, request, pk=None):
+        lesson = self.get_object()
+        payload = lesson.assessment_payload or {}
+        questions = payload.get("questions") or []
+        answers = request.data.get("answers", {}) or {}
+        if not questions:
+            return response.Response({"detail": "No assessment configured"}, status=status.HTTP_400_BAD_REQUEST)
+
+        total_questions = len(questions)
+        correct_count = 0
+        details = []
+
+        for q in questions:
+            qid = q.get("id")
+            qtype = q.get("type")
+            correct_answer = q.get("correct_answer")
+            user_answer = answers.get(qid)
+            is_correct = False
+            if qtype == Lesson.ASSESSMENT_MULTIPLE_CHOICE:
+                is_correct = user_answer == correct_answer
+            elif qtype == Lesson.ASSESSMENT_TRUE_FALSE:
+                is_correct = bool(user_answer) == bool(correct_answer)
+            elif qtype == Lesson.ASSESSMENT_MATCHING:
+                is_correct = isinstance(user_answer, dict) and user_answer == correct_answer
+            details.append({"question_id": qid, "is_correct": is_correct})
+            if is_correct:
+                correct_count += 1
+
+        score = (correct_count / total_questions) * 100 if total_questions else 0
+        attempt = AssessmentAttempt.objects.create(
+            user=request.user,
+            lesson=lesson,
+            answers=answers,
+            score=score,
+            total_questions=total_questions,
+            correct_answers=correct_count,
+        )
+        return response.Response(
+            {
+                "score": score,
+                "correct_answers": correct_count,
+                "total_questions": total_questions,
+                "details": details,
+                "attempt_id": str(attempt.id),
+            }
+        )
+
+    @decorators.action(detail=True, methods=["get"], permission_classes=[permissions.IsAuthenticated], url_path="attempts")
+    def attempts(self, request, pk=None):
+        lesson = self.get_object()
+        qs = lesson.assessment_attempts.filter(user=request.user).order_by("-created_at")
+        data = AssessmentAttemptSerializer(qs, many=True).data
+        return response.Response(data)
+
+    @decorators.action(
+        detail=True,
+        methods=["get"],
+        permission_classes=[permissions.IsAuthenticated],
+        url_path=r"attempts/(?P<attempt_id>[0-9a-f-]{36})",
+    )
+    def attempt_detail(self, request, pk=None, attempt_id=None):
+        lesson = self.get_object()
+        attempt = lesson.assessment_attempts.filter(user=request.user, id=attempt_id).first()
+        if not attempt:
+            return response.Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+        data = AssessmentAttemptSerializer(attempt).data
+        return response.Response(data)
 
 
 class AssessmentViewSet(viewsets.ModelViewSet):

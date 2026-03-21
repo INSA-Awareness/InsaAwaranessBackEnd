@@ -186,3 +186,18 @@ class EnrollmentProfileSnapshot(SoftDeleteModel):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+class AssessmentAttempt(SoftDeleteModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, related_name="assessment_attempts", on_delete=models.CASCADE)
+    lesson = models.ForeignKey(Lesson, related_name="assessment_attempts", on_delete=models.CASCADE)
+    answers = models.JSONField(default=dict, blank=True)
+    score = models.FloatField(default=0)
+    total_questions = models.PositiveIntegerField(default=0)
+    correct_answers = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("user", "lesson", "created_at")
