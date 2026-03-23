@@ -30,6 +30,7 @@ class Course(SoftDeleteModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
+    thumbnail_url = models.URLField(blank=True)
     level = models.CharField(max_length=100, blank=True)
     course_provider = models.ForeignKey(User, related_name="courses_provided", on_delete=models.PROTECT)
     organization = models.ForeignKey(

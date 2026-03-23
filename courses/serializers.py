@@ -65,6 +65,7 @@ class CourseSerializer(serializers.ModelSerializer):
             "id",
             "title",
             "description",
+            "thumbnail_url",
             "level",
             "organization",
             "course_provider",
