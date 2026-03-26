@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from accounts import urls as accounts_urls
 from organizations.views import OrganizationViewSet, OrganizationMembershipViewSet
+from organizations.views import OrganizationApplicationViewSet
 from courses.views import (
     CourseViewSet,
     ModuleViewSet,
@@ -25,6 +26,7 @@ from awareness_tools.views import AwarenessToolViewSet, AwarenessToolUsageViewSe
 router = DefaultRouter()
 router.register(r"organizations", OrganizationViewSet, basename="organization")
 router.register(r"memberships", OrganizationMembershipViewSet, basename="membership")
+router.register(r"organization-applications", OrganizationApplicationViewSet, basename="organization-application")
 router.register(r"courses", CourseViewSet, basename="course")
 router.register(r"modules", ModuleViewSet, basename="module")
 router.register(r"articles", ArticleViewSet, basename="article")

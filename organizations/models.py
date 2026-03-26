@@ -22,6 +22,37 @@ class Organization(SoftDeleteModel):
         return self.name
 
 
+class OrganizationApplication(SoftDeleteModel):
+    STATUS_PENDING = "pending"
+    STATUS_APPROVED = "approved"
+    STATUS_REJECTED = "rejected"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_APPROVED, "Approved"),
+        (STATUS_REJECTED, "Rejected"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255)
+    description = models.TextField()
+    contact_email = models.EmailField()
+    contact_phone = models.CharField(max_length=64)
+    website = models.URLField(blank=True)
+    address = models.CharField(max_length=255)
+    submitted_by = models.ForeignKey(User, related_name="org_applications", on_delete=models.SET_NULL, null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    reviewed_by = models.ForeignKey(User, related_name="org_applications_reviewed", on_delete=models.SET_NULL, null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("name", "contact_email")
+
+    def __str__(self):
+        return f"Application: {self.name} ({self.status})"
+
+
 class OrganizationMembership(SoftDeleteModel):
     ROLE_ADMIN = "admin"
     ROLE_MEMBER = "member"
