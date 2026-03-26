@@ -8,7 +8,7 @@ from courses.views import (
     ModuleViewSet,
     ArticleViewSet,
     VideoViewSet,
-    AssessmentViewSet,
+    CertificateExamViewSet,
     EnrollmentViewSet,
     CertificateViewSet,
     LessonViewSet,
@@ -29,7 +29,7 @@ router.register(r"courses", CourseViewSet, basename="course")
 router.register(r"modules", ModuleViewSet, basename="module")
 router.register(r"articles", ArticleViewSet, basename="article")
 router.register(r"videos", VideoViewSet, basename="video")
-router.register(r"assessments", AssessmentViewSet, basename="assessment")
+router.register(r"certificate-exams", CertificateExamViewSet, basename="certificate-exam")
 router.register(r"lessons", LessonViewSet, basename="lesson")
 router.register(r"enrollments", EnrollmentViewSet, basename="enrollment")
 router.register(r"certificates", CertificateViewSet, basename="certificate")

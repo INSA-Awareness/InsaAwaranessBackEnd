@@ -30,20 +30,72 @@ class VideoSerializer(serializers.ModelSerializer):
 
 
 class AssessmentSerializer(serializers.ModelSerializer):
+    def _validate_assessment_payload(self, value):
+        if value in [None, ""]:
+            return {}
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("assessment_payload must be an object")
+        questions = value.get("questions")
+        if not isinstance(questions, list) or not questions:
+            raise serializers.ValidationError("assessment_payload.questions must be a non-empty list")
+        for q in questions:
+            if not isinstance(q, dict):
+                raise serializers.ValidationError("Each question must be an object")
+            for field in ["id", "type", "question", "correct_answer"]:
+                if field not in q:
+                    raise serializers.ValidationError(f"Question missing '{field}'")
+            q_type = q.get("type")
+            if q_type not in [
+                Assessment.TYPE_MULTIPLE,
+                Assessment.TYPE_TRUE_FALSE,
+                Assessment.TYPE_MATCHING,
+            ]:
+                raise serializers.ValidationError(f"Unsupported question type: {q_type}")
+            if q_type == Assessment.TYPE_MULTIPLE:
+                options = q.get("options")
+                if not isinstance(options, list) or not options:
+                    raise serializers.ValidationError("multiple questions require options")
+                option_ids = {opt.get("id") for opt in options if isinstance(opt, dict)}
+                if q.get("correct_answer") not in option_ids:
+                    raise serializers.ValidationError("correct_answer must match an option id")
+            elif q_type == Assessment.TYPE_TRUE_FALSE:
+                if not isinstance(q.get("correct_answer"), bool):
+                    raise serializers.ValidationError("true_false correct_answer must be boolean")
+            elif q_type == Assessment.TYPE_MATCHING:
+                if not isinstance(q.get("correct_answer"), dict):
+                    raise serializers.ValidationError("matching correct_answer must be an object of pairs")
+        return value
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        payload = attrs.get("assessment_payload", getattr(self.instance, "assessment_payload", {}))
+        attrs["assessment_payload"] = self._validate_assessment_payload(payload)
+        if not attrs.get("course"):
+            raise serializers.ValidationError({"course": "course is required for certificate exams"})
+        return attrs
+
     class Meta:
         model = Assessment
-        fields = ["id", "module", "title", "passing_score", "order"]
+        fields = [
+            "id",
+            "course",
+            "title",
+            "passing_score",
+            "assessment_type",
+            "assessment_payload",
+            "order",
+        ]
+        read_only_fields = ["id"]
 
 
 class ModuleSerializer(serializers.ModelSerializer):
     articles = ArticleSerializer(many=True, read_only=True)
     videos = VideoSerializer(many=True, read_only=True)
-    assessments = AssessmentSerializer(many=True, read_only=True)
     lessons = serializers.SerializerMethodField()
 
     class Meta:
         model = Module
-        fields = ["id", "course", "title", "order", "articles", "videos", "assessments", "lessons"]
+        fields = ["id", "course", "title", "order", "articles", "videos", "lessons"]
 
     def get_lessons(self, obj):
         lessons = obj.lessons.order_by("order")
@@ -91,9 +143,10 @@ class CourseSerializer(serializers.ModelSerializer):
 
 class CourseDetailSerializer(CourseSerializer):
     modules = ModuleSerializer(many=True, read_only=True)
+    certificate_exams = AssessmentSerializer(many=True, read_only=True)
 
     class Meta(CourseSerializer.Meta):
-        fields = CourseSerializer.Meta.fields + ["modules"]
+        fields = CourseSerializer.Meta.fields + ["modules", "certificate_exams"]
 
 
 class EnrollmentSerializer(serializers.ModelSerializer):
@@ -155,6 +208,14 @@ class LessonSerializer(serializers.ModelSerializer):
         if attrs.get("content_type") == Lesson.TYPE_ASSESSMENT:
             payload = attrs.get("assessment_payload", getattr(self.instance, "assessment_payload", {}))
             attrs["assessment_payload"] = self._validate_assessment_payload(payload)
+            passing = attrs.get("passing_score", getattr(self.instance, "passing_score", 0))
+            if passing is None:
+                passing = 0
+            if not isinstance(passing, int):
+                raise serializers.ValidationError({"passing_score": "must be an integer"})
+            if passing < 0 or passing > 100:
+                raise serializers.ValidationError({"passing_score": "must be between 0 and 100"})
+            attrs["passing_score"] = passing
         return attrs
 
     def to_representation(self, instance):
@@ -185,6 +246,7 @@ class LessonSerializer(serializers.ModelSerializer):
             "image_url",
             "assessment_type",
             "assessment_payload",
+            "passing_score",
             "order",
         ]
 

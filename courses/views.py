@@ -35,19 +35,17 @@ class CourseViewSet(viewsets.ModelViewSet):
         qs = Course.objects.select_related("organization", "created_by", "assigned_by", "course_provider").prefetch_related("modules", "modules__lessons")
         user = self.request.user
         if not user or not user.is_authenticated:
-            return qs.none()
+            # Public users can see published, active courses
+            return qs.filter(status=Course.STATUS_PUBLISHED, is_active=True)
+        # Authenticated users see all courses; clients can still filter via query params.
+        return qs
 
-        role = user.role
-        if role == User.ROLE_SUPER_ADMIN:
-            return qs
-        if role == User.ROLE_COURSE_PROVIDER:
-            return qs.filter(course_provider=user)
-        if role in {User.ROLE_ORG_ADMIN, User.ROLE_MEMBER}:
-            org_ids = user.memberships.values_list("organization_id", flat=True)
-            return qs.filter(organization_id__in=org_ids)
-        if role == User.ROLE_PUBLIC:
-            return qs.filter(organization__isnull=True)
-        return qs.none()
+    def get_permissions(self):
+        if self.action in ["list", "retrieve"]:
+            return [permissions.AllowAny()]
+        if self.action in ["create", "update", "partial_update", "destroy"]:
+            return [IsCourseProvider()]
+        return super().get_permissions()
 
     def get_serializer_class(self):
         if self.action in ["retrieve", "list"]:
@@ -207,6 +205,7 @@ class VideoViewSet(viewsets.ModelViewSet):
                 correct_count += 1
 
         score = (correct_count / total_questions) * 100 if total_questions else 0
+        passed = score >= (lesson.passing_score or 0)
         attempt = AssessmentAttempt.objects.create(
             user=request.user,
             lesson=lesson,
@@ -218,6 +217,8 @@ class VideoViewSet(viewsets.ModelViewSet):
         return response.Response(
             {
                 "score": score,
+                "passed": passed,
+                "passing_score": lesson.passing_score,
                 "correct_answers": correct_count,
                 "total_questions": total_questions,
                 "details": details,
@@ -247,11 +248,11 @@ class VideoViewSet(viewsets.ModelViewSet):
         return response.Response(data)
 
 
-class AssessmentViewSet(viewsets.ModelViewSet):
-    queryset = Assessment.objects.select_related("module", "module__course")
+class CertificateExamViewSet(viewsets.ModelViewSet):
+    queryset = Assessment.objects.select_related("course")
     serializer_class = AssessmentSerializer
     permission_classes = [permissions.IsAuthenticated, IsCourseProvider]
-    filterset_fields = ["module"]
+    filterset_fields = ["course"]
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -259,7 +260,7 @@ class AssessmentViewSet(viewsets.ModelViewSet):
         if not user or not user.is_authenticated:
             return qs.none()
         if user.role != User.ROLE_SUPER_ADMIN:
-            qs = qs.filter(module__course__course_provider=user)
+            qs = qs.filter(course__course_provider=user)
         return qs
 
 

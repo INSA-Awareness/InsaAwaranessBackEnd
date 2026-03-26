@@ -89,10 +89,27 @@ class Video(SoftDeleteModel):
 
 
 class Assessment(SoftDeleteModel):
+    TYPE_MULTIPLE = "multiple"
+    TYPE_TRUE_FALSE = "true_false"
+    TYPE_MATCHING = "matching"
+    TYPE_CHOICES = [
+        (TYPE_MULTIPLE, "Multiple Choice"),
+        (TYPE_TRUE_FALSE, "True/False"),
+        (TYPE_MATCHING, "Matching"),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    module = models.ForeignKey(Module, related_name="assessments", on_delete=models.CASCADE)
-    title = models.CharField(max_length=255)
+    course = models.ForeignKey(
+        Course,
+        related_name="certificate_exams",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+    title = models.CharField(max_length=255, blank=True)
     passing_score = models.PositiveIntegerField(default=0)
+    assessment_type = models.CharField(max_length=30, choices=TYPE_CHOICES, default=TYPE_MULTIPLE)
+    assessment_payload = models.JSONField(default=dict, blank=True)
     order = models.PositiveIntegerField(default=0)
 
     class Meta:
@@ -149,6 +166,7 @@ class Lesson(SoftDeleteModel):
     image_url = models.URLField(blank=True)
     assessment_type = models.CharField(max_length=30, choices=ASSESSMENT_CHOICES, blank=True)
     assessment_payload = models.JSONField(default=dict, blank=True)
+    passing_score = models.PositiveIntegerField(default=0, validators=[MinValueValidator(0), MaxValueValidator(100)])
     order = models.PositiveIntegerField(default=0)
 
     class Meta:
