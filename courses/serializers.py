@@ -1,6 +1,9 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
+from assessment.models import Assessment as NormalizedAssessment
+from assessment.serializers import AssessmentSerializer as NormalizedAssessmentSerializer
+from assessment.services import assessment_to_legacy_payload, sync_assessment_from_legacy_payload
 from organizations.models import Organization
 from .models import (
     Course,
@@ -12,6 +15,7 @@ from .models import (
     Certificate,
     Lesson,
     AssessmentAttempt,
+    LessonProgress,
 )
 
 User = get_user_model()
@@ -30,6 +34,8 @@ class VideoSerializer(serializers.ModelSerializer):
 
 
 class AssessmentSerializer(serializers.ModelSerializer):
+    assessment = serializers.SerializerMethodField(read_only=True)
+
     def _validate_assessment_payload(self, value):
         if value in [None, ""]:
             return {}
@@ -74,6 +80,46 @@ class AssessmentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"course": "course is required for certificate exams"})
         return attrs
 
+    def _sync_related_assessment(self, instance):
+        payload = instance.assessment_payload or {}
+        related = getattr(instance, "assessment", None)
+        if related is None:
+            related = NormalizedAssessment.objects.create(
+                certificate_exam=instance,
+                title=instance.title,
+                passing_score=instance.passing_score,
+            )
+        else:
+            related.title = instance.title
+            related.passing_score = instance.passing_score
+            related.save(update_fields=["title", "passing_score", "updated_at"])
+        sync_assessment_from_legacy_payload(related, payload)
+        return related
+
+    def create(self, validated_data):
+        instance = super().create(validated_data)
+        self._sync_related_assessment(instance)
+        return instance
+
+    def update(self, instance, validated_data):
+        instance = super().update(instance, validated_data)
+        self._sync_related_assessment(instance)
+        return instance
+
+    def get_assessment(self, instance):
+        related = getattr(instance, "assessment", None)
+        if not related:
+            return None
+        return NormalizedAssessmentSerializer(related, context=self.context).data
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        related = getattr(instance, "assessment", None)
+        if related:
+            data["assessment_payload"] = assessment_to_legacy_payload(related)
+            data["assessment"] = NormalizedAssessmentSerializer(related, context=self.context).data
+        return data
+
     class Meta:
         model = Assessment
         fields = [
@@ -83,6 +129,7 @@ class AssessmentSerializer(serializers.ModelSerializer):
             "passing_score",
             "assessment_type",
             "assessment_payload",
+            "assessment",
             "order",
         ]
         read_only_fields = ["id"]
@@ -162,11 +209,13 @@ class EnrollmentSerializer(serializers.ModelSerializer):
 class CertificateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Certificate
-        fields = ["id", "enrollment", "certificate_id", "issued_at"]
-        read_only_fields = ["id", "certificate_id", "issued_at"]
+        fields = ["id", "enrollment", "certificate_id", "issued_at", "pdf_file"]
+        read_only_fields = ["id", "certificate_id", "issued_at", "pdf_file"]
 
 
 class LessonSerializer(serializers.ModelSerializer):
+    assessment = serializers.SerializerMethodField(read_only=True)
+
     def _validate_assessment_payload(self, value):
         if value in [None, ""]:
             return {}
@@ -218,12 +267,51 @@ class LessonSerializer(serializers.ModelSerializer):
             attrs["passing_score"] = passing
         return attrs
 
+    def _sync_related_assessment(self, instance):
+        payload = instance.assessment_payload or {}
+        related = getattr(instance, "assessment", None)
+        if related is None:
+            related = NormalizedAssessment.objects.create(
+                lesson=instance,
+                title=instance.title,
+                passing_score=instance.passing_score,
+            )
+        else:
+            related.title = instance.title
+            related.passing_score = instance.passing_score
+            related.save(update_fields=["title", "passing_score", "updated_at"])
+        sync_assessment_from_legacy_payload(related, payload)
+        return related
+
+    def create(self, validated_data):
+        instance = super().create(validated_data)
+        if instance.content_type == Lesson.TYPE_ASSESSMENT:
+            self._sync_related_assessment(instance)
+        return instance
+
+    def update(self, instance, validated_data):
+        instance = super().update(instance, validated_data)
+        if instance.content_type == Lesson.TYPE_ASSESSMENT:
+            self._sync_related_assessment(instance)
+        return instance
+
+    def get_assessment(self, instance):
+        related = getattr(instance, "assessment", None)
+        if not related:
+            return None
+        return NormalizedAssessmentSerializer(related, context=self.context).data
+
     def to_representation(self, instance):
         data = super().to_representation(instance)
         request = self.context.get("request")
         user = getattr(request, "user", None)
         role = getattr(user, "role", None)
         is_admin = role in {User.ROLE_SUPER_ADMIN, User.ROLE_COURSE_PROVIDER}
+        related = getattr(instance, "assessment", None)
+        if related:
+            payload = assessment_to_legacy_payload(related)
+            data["assessment_payload"] = payload
+            data["assessment"] = NormalizedAssessmentSerializer(related, context=self.context).data
         if not is_admin and data.get("assessment_payload"):
             payload = data["assessment_payload"] or {}
             questions = payload.get("questions")
@@ -246,6 +334,7 @@ class LessonSerializer(serializers.ModelSerializer):
             "image_url",
             "assessment_type",
             "assessment_payload",
+            "assessment",
             "passing_score",
             "order",
         ]
@@ -276,3 +365,10 @@ class AssignOrganizationSerializer(serializers.Serializer):
     organization_id = serializers.PrimaryKeyRelatedField(
         queryset=Organization.objects.all(), allow_null=True, required=True, source="organization"
     )
+
+
+class LessonProgressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LessonProgress
+        fields = ["id", "user", "lesson", "completed", "watched_seconds", "updated_at"]
+        read_only_fields = ["id", "user", "updated_at"]

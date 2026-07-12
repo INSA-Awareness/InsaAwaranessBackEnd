@@ -16,4 +16,9 @@ class OrgScopedViewSetMixin:
         organization = None
         if getattr(user, "role", None) != "super_admin":
             organization = user.primary_organization
-        serializer.save(created_by=user, **({self.organization_field: organization} if self.organization_field in serializer.fields else {}))
+        save_kwargs = {}
+        if "created_by" in serializer.fields:
+            save_kwargs["created_by"] = user
+        if self.organization_field in serializer.fields:
+            save_kwargs[self.organization_field] = organization
+        serializer.save(**save_kwargs)

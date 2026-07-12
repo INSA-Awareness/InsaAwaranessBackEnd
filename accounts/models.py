@@ -67,6 +67,7 @@ class User(SoftDeleteModel, AbstractBaseUser, PermissionsMixin):
     date_joined = models.DateTimeField(auto_now_add=True)
     preferred_language = models.CharField(max_length=10, choices=LANGUAGE_CHOICES, default="en")
     must_change_password = models.BooleanField(default=False)
+    email_verified = models.BooleanField(default=False)
     created_by = models.ForeignKey(
         "self",
         null=True,
@@ -105,6 +106,13 @@ class User(SoftDeleteModel, AbstractBaseUser, PermissionsMixin):
                 return "/dashboard/member"
             case _:
                 return "/dashboard/public"
+
+    def get_full_name(self) -> str:
+        full_name = f"{self.first_name} {self.last_name}".strip()
+        return full_name or self.email
+
+    def get_short_name(self) -> str:
+        return self.first_name or self.email
 
     @property
     def is_public_user(self) -> bool:

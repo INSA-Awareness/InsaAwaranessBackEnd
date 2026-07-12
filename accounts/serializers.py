@@ -1,10 +1,12 @@
 import uuid
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
-from django.utils.http import urlsafe_base64_encode
-from django.utils.encoding import force_bytes
+from django.core.mail import send_mail
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes, force_str
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 import re
@@ -50,10 +52,26 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         password = validated_data.pop("password")
-        user = User.objects.create_user(role=User.ROLE_PUBLIC, **validated_data)
+        user = User.objects.create_user(role=User.ROLE_PUBLIC, is_active=False, **validated_data)
         user.set_password(password)
         user.must_change_password = False
         user.save()
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = default_token_generator.make_token(user)
+        frontend_url = settings.FRONTEND_URL.rstrip("/")
+        send_mail(
+            subject="Verify your email address",
+            message=(
+                f"Hello,\n\n"
+                f"Thank you for registering. Please verify your email address to activate your account.\n\n"
+                f"Click the link below to verify your email:\n"
+                f"{frontend_url}/verify-email?uid={uid}&token={token}\n\n"
+                f"If you did not register, please ignore this email.\n"
+            ),
+            from_email=None,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
         return user
 
 
@@ -113,6 +131,66 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         user.set_password(self.validated_data["new_password"])
         user.must_change_password = False
         user.save()
+        return user
+
+
+class VerifyEmailSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+
+    def validate(self, attrs):
+        try:
+            uid = force_str(urlsafe_base64_decode(attrs["uid"]))
+            user = User.objects.get(pk=uid)
+        except (User.DoesNotExist, ValueError, TypeError, OverflowError):
+            raise serializers.ValidationError("Invalid verification link")
+        if user.email_verified:
+            raise serializers.ValidationError("Email already verified")
+        if not default_token_generator.check_token(user, attrs["token"]):
+            raise serializers.ValidationError("Invalid or expired verification token")
+        attrs["user"] = user
+        return attrs
+
+    def save(self, **kwargs):
+        user = self.validated_data["user"]
+        user.email_verified = True
+        user.is_active = True
+        user.save(update_fields=["email_verified", "is_active"])
+        return user
+
+
+class ResendVerificationSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        try:
+            user = User.objects.get(email=value)
+        except User.DoesNotExist:
+            raise serializers.ValidationError("No account found with this email")
+        if user.email_verified:
+            raise serializers.ValidationError("Email already verified")
+        if user.is_active:
+            raise serializers.ValidationError("Account already active")
+        self._user = user
+        return value
+
+    def save(self, **kwargs):
+        user = self._user
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = default_token_generator.make_token(user)
+        frontend_url = settings.FRONTEND_URL.rstrip("/")
+        send_mail(
+            subject="Verify your email address",
+            message=(
+                f"Hello,\n\n"
+                f"Please verify your email address by clicking the link below:\n"
+                f"{frontend_url}/verify-email?uid={uid}&token={token}\n\n"
+                f"If you did not create an account, please ignore this email.\n"
+            ),
+            from_email=None,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
         return user
 
 

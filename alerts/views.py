@@ -6,6 +6,7 @@ from rest_framework import viewsets, permissions, decorators, response, status
 from django.core.mail import EmailMultiAlternatives
 
 from core.permissions import IsSuperAdmin
+from notifications.models import Notification
 from .models import Alert, AlertDelivery, AlertView
 from .serializers import AlertSerializer, AlertDeliverySerializer, AlertViewSerializer
 
@@ -86,6 +87,17 @@ class AlertViewSet(viewsets.ModelViewSet):
                     delivery.status = AlertDelivery.STATUS_FAILED
                     delivery.detail = str(exc)
                 delivery.save(update_fields=["status", "delivered_at", "detail"])
+
+        # Create in-app notifications
+        notifications = [
+            Notification(
+                user=user,
+                message=f"[{alert.severity.title()}] {alert.title}",
+                type="alert",
+            )
+            for user in recipients.iterator()
+        ]
+        Notification.objects.bulk_create(notifications, batch_size=500)
 
         # Log SMS intent if enabled (placeholder)
         if alert.notify_sms:

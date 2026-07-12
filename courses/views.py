@@ -1,11 +1,20 @@
+import io
+import os
+
+from django.conf import settings
+from django.core.files.base import ContentFile
 from django.db import transaction
 from django.db.models import Q
+from django.http import FileResponse, HttpResponse
 from rest_framework import viewsets, permissions, decorators, response, status
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+from reportlab.pdfgen import canvas
 
 from core.permissions import IsSuperAdmin, IsCourseProvider
 from .models import Course, Module, Article, Video, Assessment, Enrollment, Certificate, Lesson, EnrollmentProfileSnapshot
-from .models import AssessmentAttempt
+from .models import AssessmentAttempt, LessonProgress
 from accounts.models import BackgroundProfile, User
 from .serializers import (
     CourseSerializer,
@@ -18,6 +27,7 @@ from .serializers import (
     CertificateSerializer,
     LessonSerializer,
     AssessmentAttemptSerializer,
+    LessonProgressSerializer,
     AssignProviderSerializer,
     AssignOrganizationSerializer,
 )
@@ -51,11 +61,6 @@ class CourseViewSet(viewsets.ModelViewSet):
         if self.action in ["retrieve", "list"]:
             return CourseDetailSerializer
         return CourseSerializer
-
-    def get_permissions(self):
-        if self.action in ["create", "update", "partial_update", "destroy"]:
-            return [IsCourseProvider()]
-        return super().get_permissions()
 
     def perform_create(self, serializer):
         user = self.request.user
@@ -404,3 +409,87 @@ class CertificateViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Certificate.objects.select_related("enrollment", "enrollment__course", "enrollment__user")
     serializer_class = CertificateSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.role not in (User.ROLE_SUPER_ADMIN,):
+            qs = qs.filter(enrollment__user=user)
+        return qs
+
+    @decorators.action(detail=False, methods=["get"], permission_classes=[permissions.AllowAny], url_path=r"verify/(?P<certificate_id>[0-9a-f-]{36})")
+    def verify(self, request, certificate_id=None):
+        cert = Certificate.objects.filter(certificate_id=certificate_id).select_related(
+            "enrollment__user", "enrollment__course"
+        ).first()
+        if not cert:
+            return response.Response({"valid": False, "detail": "Certificate not found"}, status=status.HTTP_404_NOT_FOUND)
+        return response.Response({
+            "valid": True,
+            "certificate_id": str(cert.certificate_id),
+            "issued_at": cert.issued_at,
+            "user": cert.enrollment.user.email,
+            "course": cert.enrollment.course.title,
+        })
+
+    @decorators.action(detail=True, methods=["get"], url_path="download")
+    def download(self, request, pk=None):
+        cert = self.get_object()
+        if not cert.pdf_file:
+            return response.Response({"detail": "PDF not generated yet. Use generate-pdf action first."}, status=status.HTTP_400_BAD_REQUEST)
+        return FileResponse(cert.pdf_file.open("rb"), content_type="application/pdf", filename=f"certificate-{cert.certificate_id}.pdf")
+
+    @decorators.action(detail=True, methods=["post"], url_path="generate-pdf")
+    def generate_pdf(self, request, pk=None):
+        cert = self.get_object()
+        user = cert.enrollment.user
+        course = cert.enrollment.course
+        buffer = io.BytesIO()
+        p = canvas.Canvas(buffer, pagesize=A4)
+        width, height = A4
+        p.setTitle(f"Certificate - {course.title}")
+        p.setFont("Helvetica-Bold", 24)
+        p.drawCentredString(width / 2, height - 60 * mm, "Certificate of Completion")
+        p.setFont("Helvetica", 16)
+        p.drawCentredString(width / 2, height - 80 * mm, f"This certifies that")
+        p.setFont("Helvetica-Bold", 20)
+        p.drawCentredString(width / 2, height - 95 * mm, f"{user.get_full_name() or user.email}")
+        p.setFont("Helvetica", 16)
+        p.drawCentredString(width / 2, height - 110 * mm, f"has successfully completed the course")
+        p.setFont("Helvetica-Bold", 18)
+        p.drawCentredString(width / 2, height - 125 * mm, course.title)
+        p.setFont("Helvetica", 12)
+        p.drawCentredString(width / 2, height - 145 * mm, f"Issued on: {cert.issued_at.strftime('%B %d, %Y')}")
+        p.drawCentredString(width / 2, height - 155 * mm, f"Certificate ID: {cert.certificate_id}")
+        p.showPage()
+        p.save()
+        pdf_content = buffer.getvalue()
+        buffer.close()
+        cert.pdf_file.save(f"certificate-{cert.certificate_id}.pdf", ContentFile(pdf_content), save=True)
+        serializer = self.get_serializer(cert)
+        return response.Response(serializer.data)
+
+
+class LessonProgressViewSet(viewsets.ModelViewSet):
+    queryset = LessonProgress.objects.select_related("user", "lesson", "lesson__module").all()
+    serializer_class = LessonProgressSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filterset_fields = ["lesson", "completed"]
+
+    def get_queryset(self):
+        return super().get_queryset().filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+        self._recalc_enrollment(serializer.instance)
+
+    def perform_update(self, serializer):
+        serializer.save()
+        self._recalc_enrollment(serializer.instance)
+
+    def _recalc_enrollment(self, progress):
+        enrollment = Enrollment.objects.filter(
+            user=progress.user, course__modules__lessons=progress.lesson
+        ).first()
+        if enrollment:
+            enrollment.recalculate_progress()

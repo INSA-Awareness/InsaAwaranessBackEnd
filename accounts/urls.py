@@ -8,6 +8,8 @@ from .views import (
     ChangePasswordView,
     PasswordResetRequestView,
     PasswordResetConfirmView,
+    VerifyEmailView,
+    ResendVerificationView,
     UserAdminViewSet,
     LoginView,
     BackgroundProfileView,
@@ -24,6 +26,8 @@ urlpatterns = [
     path("change-password/", ChangePasswordView.as_view(), name="change-password"),
     path("password-reset/", PasswordResetRequestView.as_view(), name="password-reset"),
     path("password-reset/confirm/", PasswordResetConfirmView.as_view(), name="password-reset-confirm"),
+    path("verify-email/", VerifyEmailView.as_view(), name="verify-email"),
+    path("resend-verification/", ResendVerificationView.as_view(), name="resend-verification"),
     path("user/background-profile/", BackgroundProfileView.as_view(), name="background-profile"),
     path("", include(router.urls)),
 ]

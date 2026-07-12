@@ -59,8 +59,7 @@ class OrganizationApplicationSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "submitted_by", "status", "reviewed_by", "reviewed_at", "created_at"]
 
     def validate(self, attrs):
-        # Require key organization details
-        required_fields = ["name", "description", "contact_email", "contact_phone", "address"]
+        required_fields = ["name", "description", "contact_email", "contact_phone"]
         missing = [f for f in required_fields if not attrs.get(f)]
         if missing:
             raise serializers.ValidationError({"detail": f"Missing required fields: {', '.join(missing)}"})

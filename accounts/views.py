@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.mail import send_mail
 from django.utils.translation import gettext_lazy as _
@@ -5,12 +6,15 @@ from rest_framework import generics, permissions, viewsets, decorators, response
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from core.permissions import IsSuperAdmin, IsOrgAdmin
+from core.throttles import LoginRateThrottle, RegisterRateThrottle, PasswordResetRateThrottle
 from .serializers import (
     RegisterSerializer,
     UserSerializer,
     ChangePasswordSerializer,
     PasswordResetRequestSerializer,
     PasswordResetConfirmSerializer,
+    VerifyEmailSerializer,
+    ResendVerificationSerializer,
     AdminCreateUserSerializer,
     OrgAdminCreateUserSerializer,
     CustomTokenObtainPairSerializer,
@@ -26,12 +30,14 @@ class LoginView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
     permission_classes = [permissions.AllowAny]
     allow_password_change_bypass = True
+    throttle_classes = [LoginRateThrottle]
 
 
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
     allow_password_change_bypass = True
+    throttle_classes = [RegisterRateThrottle]
 
 
 class MeView(generics.RetrieveAPIView):
@@ -68,31 +74,68 @@ class PasswordResetRequestView(generics.GenericAPIView):
     serializer_class = PasswordResetRequestSerializer
     permission_classes = [permissions.AllowAny]
     allow_password_change_bypass = True
+    throttle_classes = [PasswordResetRateThrottle]
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         payload = serializer.save()
+        frontend_url = settings.FRONTEND_URL.rstrip("/")
         send_mail(
             subject="Password reset instructions",
-            message=f"Use token {payload['token']} with uid {payload['uid']} to reset your password.",
+            message=(
+                f"Hello,\n\n"
+                f"You recently requested to reset your password.\n\n"
+                f"Click the link below to reset your password:\n"
+                f"{frontend_url}/reset-password?uid={payload['uid']}&token={payload['token']}\n\n"
+                f"If you did not request this, please ignore this email.\n"
+                f"Your password will remain unchanged.\n"
+            ),
             from_email=None,
             recipient_list=[serializer.validated_data["email"]],
-            fail_silently=True,
+            fail_silently=False,
         )
-        return response.Response({"detail": "Reset token generated", **payload})
+        return response.Response(
+            {"detail": "If an account with this email exists, password reset instructions have been sent."}
+        )
 
 
 class PasswordResetConfirmView(generics.GenericAPIView):
     serializer_class = PasswordResetConfirmSerializer
     permission_classes = [permissions.AllowAny]
     allow_password_change_bypass = True
+    throttle_classes = [PasswordResetRateThrottle]
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return response.Response({"detail": "Password reset successful"})
+
+
+class VerifyEmailView(generics.GenericAPIView):
+    serializer_class = VerifyEmailSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return response.Response({"detail": "Email verified successfully. You can now log in."})
+
+
+class ResendVerificationView(generics.GenericAPIView):
+    serializer_class = ResendVerificationSerializer
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [PasswordResetRateThrottle]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return response.Response(
+            {"detail": "If the account exists and is not yet verified, a new verification email has been sent."}
+        )
 
 
 class UserAdminViewSet(viewsets.ModelViewSet):

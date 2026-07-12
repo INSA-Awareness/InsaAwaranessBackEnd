@@ -134,6 +134,24 @@ class Enrollment(SoftDeleteModel):
     class Meta:
         unique_together = ("user", "course")
 
+    def recalculate_progress(self):
+        lesson_ids = Lesson.objects.filter(module__course=self.course).values_list("id", flat=True)
+        total = len(lesson_ids)
+        if total == 0:
+            self.progress = 0
+            self.status = self.STATUS_IN_PROGRESS
+        else:
+            completed = LessonProgress.objects.filter(
+                user=self.user, lesson_id__in=lesson_ids, completed=True
+            ).count()
+            self.progress = int((completed / total) * 100)
+            self.status = self.STATUS_COMPLETED if self.progress >= 100 else self.STATUS_IN_PROGRESS
+        self.save(update_fields=["progress", "status", "updated_at"])
+        # Auto-create certificate when enrollment becomes completed
+        if self.status == self.STATUS_COMPLETED and not hasattr(self, "certificate"):
+            from .models import Certificate
+            Certificate.objects.create(enrollment=self)
+
 
 class Lesson(SoftDeleteModel):
     TYPE_VIDEO = "video"
@@ -178,6 +196,7 @@ class Certificate(SoftDeleteModel):
     enrollment = models.OneToOneField(Enrollment, related_name="certificate", on_delete=models.CASCADE)
     certificate_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     issued_at = models.DateTimeField(auto_now_add=True)
+    pdf_file = models.FileField(upload_to="certificates/", null=True, blank=True)
 
 
 class EnrollmentProfileSnapshot(SoftDeleteModel):
@@ -220,3 +239,20 @@ class AssessmentAttempt(SoftDeleteModel):
     class Meta:
         ordering = ["-created_at"]
         unique_together = ("user", "lesson", "created_at")
+
+
+class LessonProgress(SoftDeleteModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, related_name="lesson_progress", on_delete=models.CASCADE)
+    lesson = models.ForeignKey(Lesson, related_name="progress_records", on_delete=models.CASCADE)
+    completed = models.BooleanField(default=False)
+    watched_seconds = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("user", "lesson")
+        verbose_name_plural = "lesson progress"
+        ordering = ["-updated_at"]
+
+    def __str__(self):
+        return f"{self.user.email} - {self.lesson.title}: {'✓' if self.completed else '○'}"

@@ -2,11 +2,12 @@ from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 
 from organizations.models import Organization, OrganizationMembership
-from courses.models import Course, Module, Article, Video, Assessment, Enrollment
+from courses.models import Course, Module, Article, Video, Assessment as CourseAssessment, Enrollment, Lesson
 from campaigns.models import Campaign
 from resources.models import Resource
 from finance.models import PaymentApproval
 from training_requests.models import TrainingRequest
+from assessment.models import Assessment, Question, Choice
 
 
 class Command(BaseCommand):
@@ -64,7 +65,44 @@ class Command(BaseCommand):
         mod1, _ = Module.objects.get_or_create(course=course, order=1, defaults={"title": "Introduction"})
         Article.objects.get_or_create(module=mod1, order=1, defaults={"content": "Welcome"})
         Video.objects.get_or_create(module=mod1, order=2, defaults={"video_url": "https://example.com/video", "duration": 120})
-        Assessment.objects.get_or_create(module=mod1, order=3, defaults={"title": "Quiz", "passing_score": 70})
+        lesson = Lesson.objects.get_or_create(
+            module=mod1,
+            title="Introduction Quiz",
+            defaults={
+                "content_type": Lesson.TYPE_ASSESSMENT,
+                "language": "en",
+                "assessment_type": Lesson.ASSESSMENT_MULTIPLE_CHOICE,
+                "assessment_payload": {
+                    "questions": [
+                        {
+                            "id": "q1",
+                            "type": "multiple_choice",
+                            "question": "What is phishing?",
+                            "correct_answer": "c1",
+                            "options": [
+                                {"id": "c1", "text": "A fraudulent attempt to obtain sensitive information"},
+                                {"id": "c2", "text": "A security protocol"},
+                            ],
+                        }
+                    ]
+                },
+                "passing_score": 70,
+            },
+        )[0]
+
+        lesson_assessment, _ = Assessment.objects.get_or_create(
+            lesson=lesson,
+            defaults={"title": lesson.title, "passing_score": 70},
+        )
+        question, _ = Question.objects.get_or_create(
+            assessment=lesson_assessment,
+            order=1,
+            defaults={"type": Question.TYPE_MULTIPLE_CHOICE, "prompt": "What is phishing?", "points": 1},
+        )
+        Choice.objects.get_or_create(question=question, order=1, defaults={"text": "A fraudulent attempt to obtain sensitive information", "value": "c1", "is_correct": True})
+        Choice.objects.get_or_create(question=question, order=2, defaults={"text": "A security protocol", "value": "c2", "is_correct": False})
+
+        CourseAssessment.objects.get_or_create(course=course, order=3, defaults={"title": "Quiz", "passing_score": 70})
 
         Enrollment.objects.get_or_create(user=member, course=course, defaults={"progress": 0})
 
